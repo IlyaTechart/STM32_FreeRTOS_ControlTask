@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include"FreeRTOS.h"
 #include"task.h"
+#include <stdbool.h>
 
 
 
@@ -47,6 +48,13 @@
 
 /* USER CODE BEGIN PV */
 
+TaskHandle_t Task1Handle = NULL;
+TaskHandle_t Task2Handle = NULL;
+TaskHandle_t Task3Handle = NULL;
+TaskHandle_t ButtonTaskHandle = NULL;
+
+TaskHandle_t NumberDeleteTask = NULL;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,10 +73,18 @@ void vTaskCode1( void * pvParameters )
 {
 	( void ) pvParameters;
 
+	BaseType_t status;
+
 	for( ;; )
 	{
 		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_5);
-		vTaskDelay( 500 / portTICK_PERIOD_MS );
+		status = xTaskNotifyWait(0,0,NULL,pdMS_TO_TICKS(200));
+		if(status == pdPASS)
+		{
+			NumberDeleteTask = Task2Handle;
+			vTaskDelete(Task1Handle);
+		}
+
 	}
 }
 
@@ -76,10 +92,17 @@ void vTaskCode2( void * pvParameters )
 {
 	( void ) pvParameters;
 
+	BaseType_t status;
+
 	for( ;; )
 	{
 		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
-		vTaskDelay( 1000 / portTICK_PERIOD_MS );
+		status = xTaskNotifyWait(0,0,NULL,pdMS_TO_TICKS(400));
+		if(status == pdPASS)
+		{
+			NumberDeleteTask = Task3Handle;
+			vTaskDelete(Task2Handle);
+		}
 	}
 }
 
@@ -87,10 +110,40 @@ void vTaskCode3( void * pvParameters )
 {
 	( void ) pvParameters;
 
+	BaseType_t status;
+
 	for( ;; )
 	{
+
 		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
-		vTaskDelay( 2000 / portTICK_PERIOD_MS );
+		status = xTaskNotifyWait(0,0,NULL,pdMS_TO_TICKS(800));
+		if(status == pdPASS)
+		{
+			vTaskDelete(Task3Handle);
+		}
+	}
+}
+
+void ButtonTask( void * pvParameters )
+{
+	( void ) pvParameters;
+	bool state = 0;
+	bool prev_red = 0;
+	NumberDeleteTask = Task1Handle;
+
+	for( ;; )
+	{
+		state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
+		if(!state)
+		{
+			if(prev_red)
+			{
+				xTaskNotify(NumberDeleteTask, 0,eNoAction);
+			}
+		}
+		prev_red = state;
+
+		vTaskDelay( pdMS_TO_TICKS(10) );
 	}
 }
 
@@ -135,16 +188,13 @@ int main(void)
 
   BaseType_t xReturned;
 
-  TaskHandle_t Task1Handle = NULL;
-  TaskHandle_t Task2Handle = NULL;
-  TaskHandle_t Task3Handle = NULL;
 
   xReturned = xTaskCreate(
 	  vTaskCode1,       // Функция задачи
 	  "Task1",          // Имя задачи (для отладки)
 	  128,             // Размер стека задачи в словах
 	  NULL,   		   // Параметр, передаваемый в задачу
-	  2, 				// Приоритет задачи
+	  1, 				// Приоритет задачи
 	  &Task1Handle );          // Указатель на дескриптор задачи (не используется здесь)
 
   configASSERT(xReturned == pdPASS); // Проверка успешного создания задачи
@@ -164,10 +214,18 @@ int main(void)
   	  "Task3",          // Имя задачи (для отладки)
   	  128,             // Размер стека задачи в словах
   	  NULL,   		   // Параметр, передаваемый в задачу
-  	  2, 				// Приоритет задачи
+  	  3, 				// Приоритет задачи
 	  &Task3Handle );          // Указатель на дескриптор задачи (не используется здесь)
 
   configASSERT(xReturned == pdPASS);
+
+  xReturned = xTaskCreate(
+	  ButtonTask,       // Функция задачи
+  	  "Button Task",          // Имя задачи (для отладки)
+  	  128,             // Размер стека задачи в словах
+  	  NULL,   		   // Параметр, передаваемый в задачу
+  	  4, 				// Приоритет задачи
+	  &ButtonTaskHandle );          // Указатель на дескриптор задачи (не используется здесь)
 
   vTaskStartScheduler();
 
